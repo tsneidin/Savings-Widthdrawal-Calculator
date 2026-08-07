@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Savings &amp; Retirement Withdrawal Calculator</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  :root{
+    --bg:#0b1220;
+    --panel:#101a2e;
+    --card:#16213a;
+    --card-2:#1b2946;
+    --line:#253356;
+    --text:#e6edf7;
+    --muted:#8ea0bc;
+    --accent:#22d3ee;
+    --accent-2:#2dd4bf;
+    --danger:#f87171;
+    --ok:#34d399;
+    --warn:#fbbf24;
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    background:radial-gradient(1100px 700px at 75% -10%,#132244 0%,var(--bg) 55%);
+    color:var(--text);
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  header{
+    max-width:1440px;margin:0 auto;padding:28px 24px 6px;
+  }
+  header h1{
+    margin:0;font-size:clamp(1.35rem,2.6vw,1.9rem);font-weight:800;letter-spacing:-0.02em;
+  }
+  header p{
+    margin:6px 0 0;color:var(--muted);font-size:0.92rem;
+  }
+  .layout{
+    display:grid;
+    grid-template-columns:minmax(320px,400px) 1fr;
+    gap:20px;
+    max-width:1440px;margin:0 auto;padding:20px 24px 40px;
+    align-items:start;
+  }
+  @media (max-width:920px){
+    .layout{grid-template-columns:1fr}
+  }
+  .panel{
+    background:linear-gradient(180deg,var(--panel),#0e1729);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:20px;
+    box-shadow:0 10px 30px rgba(0,0,0,.35);
+  }
+  .panel h2{
+    margin:0 0 16px;font-size:.95rem;font-weight:700;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--accent);
+  }
+  .controls{position:sticky;top:16px}
+  @media (max-width:920px){.controls{position:static}}
+
+  .control{display:flex;flex-direction:column;gap:8px;margin-bottom:20px}
+  .control-head{
+    display:flex;justify-content:space-between;align-items:center;gap:10px;
+  }
+  .control label{font-size:.9rem;font-weight:600;color:var(--text)}
+  .input-wrap{
+    display:flex;align-items:center;gap:4px;
+    background:var(--card);border:1px solid var(--line);border-radius:9px;
+    padding:2px 10px;transition:border-color .15s;
+  }
+  .input-wrap:focus-within{border-color:var(--accent)}
+  .input-wrap input[type=number]{
+    width:110px;background:transparent;border:none;outline:none;color:var(--text);
+    font-size:1rem;font-weight:700;text-align:right;font-variant-numeric:tabular-nums;
+    -moz-appearance:textfield;
+  }
+  .input-wrap input[type=number]::-webkit-outer-spin-button,
+  .input-wrap input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  .input-wrap .unit{color:var(--muted);font-size:.8rem;font-weight:600}
+
+  input[type=range]{
+    -webkit-appearance:none;appearance:none;width:100%;height:6px;border-radius:3px;
+    background:linear-gradient(90deg,var(--accent),#1b5f73);
+    outline:none;cursor:pointer;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;appearance:none;width:18px;height:18px;border-radius:50%;
+    background:#fff;border:3px solid var(--accent);box-shadow:0 2px 8px rgba(0,0,0,.5);
+    transition:transform .1s;
+  }
+  input[type=range]::-webkit-slider-thumb:active{transform:scale(1.2)}
+  input[type=range]::-moz-range-thumb{
+    width:14px;height:14px;border-radius:50%;background:#fff;
+    border:3px solid var(--accent);box-shadow:0 2px 8px rgba(0,0,0,.5);
+  }
+  .seg{
+    display:flex;background:var(--card);border:1px solid var(--line);border-radius:9px;
+    overflow:hidden;
+  }
+  .seg button{
+    flex:1;padding:8px 0;background:transparent;border:none;color:var(--muted);
+    font-size:.85rem;font-weight:700;cursor:pointer;transition:all .15s;
+  }
+  .seg button.active{background:var(--accent);color:#06222c}
+  .hint{font-size:.75rem;color:var(--muted);margin-top:8px}
+  .note{
+    margin-top:6px;padding:10px 12px;border-radius:9px;font-size:.8rem;line-height:1.45;
+    background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.35);color:var(--warn);
+    display:none;
+  }
+  .note.show{display:block}
+
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:18px}
+  .kpi{
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:14px 16px;position:relative;overflow:hidden;
+  }
+  .kpi::before{
+    content:'';position:absolute;left:0;top:0;bottom:0;width:4px;
+    background:var(--accent);
+  }
+  .kpi.good::before{background:var(--ok)}
+  .kpi.bad::before{background:var(--danger)}
+  .kpi .k-label{font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .kpi .k-value{font-size:clamp(1.15rem,2.2vw,1.5rem);font-weight:800;margin-top:6px;font-variant-numeric:tabular-nums;letter-spacing:-0.01em}
+  .kpi .k-sub{font-size:.75rem;color:var(--muted);margin-top:4px}
+  .kpi.good .k-value{color:var(--ok)}
+  .kpi.bad .k-value{color:var(--danger)}
+
+  .chart-wrap{
+    position:relative;height:390px;background:var(--card);
+    border:1px solid var(--line);border-radius:var(--radius);padding:16px;
+  }
+  @media (max-width:520px){.chart-wrap{height:320px}}
+  .chart-legend{
+    display:flex;gap:18px;flex-wrap:wrap;margin:12px 2px 0;font-size:.78rem;color:var(--muted);
+  }
+  .chart-legend .sw{display:inline-block;width:14px;height:4px;border-radius:2px;margin-right:6px;vertical-align:middle}
+  .chart-legend .sw.red{background:var(--danger)}
+  .chart-legend .sw.teal{background:var(--accent)}
+
+  details{
+    margin-top:18px;background:var(--card);border:1px solid var(--line);
+    border-radius:var(--radius);overflow:hidden;
+  }
+  summary{
+    padding:14px 16px;cursor:pointer;font-weight:700;font-size:.9rem;
+    user-select:none;list-style:none;
+  }
+  summary::-webkit-details-marker{display:none}
+  summary::after{content:'\25BC';float:right;color:var(--muted);font-size:.7rem;transition:transform .2s}
+  details[open] summary::after{transform:rotate(180deg)}
+  .table-scroll{max-height:420px;overflow:auto}
+  table{width:100%;border-collapse:collapse;font-size:.84rem;font-variant-numeric:tabular-nums}
+  thead th{
+    position:sticky;top:0;background:var(--card-2);text-align:right;padding:10px 12px;
+    font-size:.7rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);
+    border-bottom:1px solid var(--line);z-index:1;
+  }
+  thead th:first-child,tbody td:first-child{text-align:left}
+  tbody td{padding:8px 12px;text-align:right;border-bottom:1px solid rgba(37,51,86,.45)}
+  tbody tr:hover{background:rgba(34,211,238,.05)}
+  tbody tr.depleted{background:rgba(248,113,113,.09)}
+  tbody tr.depleted td{color:var(--danger)}
+  tbody tr.total-row td{font-weight:800;color:var(--accent);border-top:2px solid var(--line);border-bottom:none;background:rgba(34,211,238,.05)}
+  footer{
+    max-width:1440px;margin:0 auto;padding:0 24px 36px;color:var(--muted);
+    font-size:.75rem;line-height:1.6;
+  }
+  footer code{color:var(--accent-2)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Savings &amp; Retirement Withdrawal Calculator</h1>
+  <p>Drag any slider or type a value &mdash; projections, KPIs, chart and the year-by-year table update in real time.</p>
+</header>
+
+<main class="layout">
+  <!-- ==================== INPUTS ==================== -->
+  <section class="panel controls" aria-label="Inputs">
+    <h2>Assumptions</h2>
+
+    <div class="control">
+      <div class="control-head">
+        <label for="curAgeNum">Current Age</label>
+        <div class="input-wrap">
+          <input type="number" id="curAgeNum" min="18" max="100" step="1" value="60">
+          <span class="unit">yrs</span>
+        </div>
+      </div>
+      <input type="range" id="curAgeSlider" min="18" max="100" step="1" value="60">
+    </div>
+
+    <div class="control">
+      <div class="control-head">
+        <label for="lifeNum">Life Expectancy</label>
+        <div class="input-wrap">
+          <input type="number" id="lifeNum" min="50" max="110" step="1" value="90">
+          <span class="unit">yrs</span>
+        </div>
+      </div>
+      <input type="range" id="lifeSlider" min="50" max="110" step="1" value="90">
+    </div>
+
+    <div class="control">
+      <div class="control-head">
+        <label for="balanceNum">Starting Portfolio Balance</label>
+        <div class="input-wrap">
+          <span class="unit">$</span>
+          <input type="number" id="balanceNum" min="0" max="10000000" step="10000" value="1000000">
+        </div>
+      </div>
+      <input type="range" id="balanceSlider" min="0" max="10000000" step="10000" value="1000000">
+    </div>
+
+    <div class="control">
+      <div class="control-head">
+        <label for="withdrawNum">Monthly Withdrawal Amount</label>
+        <div class="input-wrap">
+          <span class="unit">$</span>
+          <input type="number" id="withdrawNum" min="0" max="50000" step="100" value="4000">
+        </div>
+      </div>
+      <input type="range" id="withdrawSlider" min="0" max="50000" step="100" value="4000">
+    </div>
+
+    <div class="control">
+      <div class="control-head">
+        <label for="rateNum">Expected Annual Return</label>
+        <div class="input-wrap">
+          <input type="number" id="rateNum" min="0" max="15" step="0.1" value="6">
+          <span class="unit">%</span>
+        </div>
+      </div>
+      <input type="range" id="rateSlider" min="0" max="15" step="0.1" value="6">
+    </div>
+
+    <div class="control">
+      <div class="control-head">
+        <label for="inflNum">Annual Inflation Rate</label>
+        <div class="input-wrap">
+          <input type="number" id="inflNum" min="0" max="10" step="0.1" value="2.5">
+          <span class="unit">%</span>
+        </div>
+      </div>
+      <input type="range" id="inflSlider" min="0" max="10" step="0.1" value="2.5">
+    </div>
+
+    <div class="control">
+      <label style="margin-bottom:-2px">Interest Compounding</label>
+      <div class="seg" id="compSeg">
+        <button type="button" data-freq="monthly" class="active">Monthly</button>
+        <button type="button" data-freq="annual">Annually</button>
+      </div>
+    </div>
+
+    <p class="hint">
+      Withdrawals step up by the inflation rate each year. The simulation runs month-by-month and stops the
+      moment the portfolio is exhausted, so results show exactly when savings run dry.
+    </p>
+    <div class="note" id="note" role="status"></div>
+  </section>
+
+  <!-- ==================== OUTPUTS ==================== -->
+  <section class="panel dashboard" aria-label="Results">
+    <div class="kpis">
+      <div class="kpi" id="kpiInterest">
+        <div class="k-label">Total Interest Earned</div>
+        <div class="k-value">$0</div>
+        <div class="k-sub">cumulative growth through retirement</div>
+      </div>
+      <div class="kpi" id="kpiWithdrawn">
+        <div class="k-label">Total Funds Withdrawn</div>
+        <div class="k-value">$0</div>
+        <div class="k-sub">inflation-adjusted, cumulatively</div>
+      </div>
+      <div class="kpi" id="kpiRunout">
+        <div class="k-label">Money Runs Out At</div>
+        <div class="k-value">Sustained</div>
+        <div class="k-sub">portfolio survives to life expectancy</div>
+      </div>
+      <div class="kpi" id="kpiFinal">
+        <div class="k-label">Balance At Age</div>
+        <div class="k-value">$0</div>
+        <div class="k-sub">ending balance at life expectancy</div>
+      </div>
+    </div>
+
+    <div class="chart-wrap">
+      <canvas id="chart"></canvas>
+    </div>
+    <div class="chart-legend">
+      <span><span class="sw teal"></span>Portfolio balance</span>
+      <span><span class="sw red"></span>Depleted (runs out at age marked &bull;)</span>
+    </div>
+
+    <details>
+      <summary>Year-by-Year Breakdown (collapsible)</summary>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Age</th><th>Starting Balance</th><th>Total Withdrawals</th>
+              <th>Interest Earned</th><th>Ending Balance</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </details>
+  </section>
+</main>
+
+<footer>
+  <p>
+    Simulation notes: interest compounds <code>monthly</code> or <code>annually</code> per your selection;
+    the monthly withdrawal rises each year by the inflation rate. Rates are treated as nominal gross returns
+    &mdash; subtract your effective tax drag from the return input to model after-tax performance. All values in USD.
+  </p>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  var els = {
+    curAge:   { slider: $('curAgeSlider'),  num: $('curAgeNum') },
+    life:     { slider: $('lifeSlider'),    num: $('lifeNum') },
+    balance:  { slider: $('balanceSlider'), num: $('balanceNum') },
+    withdraw: { slider: $('withdrawSlider'),num: $('withdrawNum') },
+    rate:     { slider: $('rateSlider'),    num: $('rateNum') },
+    infl:     { slider: $('inflSlider'),    num: $('inflNum') }
+  };
+  var compSeg = $('compSeg');
+  var compFreq = 'monthly';
+
+  var fmtUSD = function (v) {
+    if (!isFinite(v)) v = 0;
+    return '$' + Math.round(v).toLocaleString('en-US');
+  };
+  var fmtPct = function (v) { return v.toFixed(1) + '%'; };
+
+  /* ---------- bidirectional slider <-> number binding ---------- */
+  Object.keys(els).forEach(function (key) {
+    var pair = els[key];
+    pair.slider.addEventListener('input', function () {
+      pair.num.value = pair.slider.value;
+      recalc();
+    });
+    pair.num.addEventListener('input', function () {
+      pair.slider.value = pair.num.value;
+      recalc();
+    });
+  });
+
+  compSeg.addEventListener('click', function (e) {
+    var btn = e.target.closest('button');
+    if (!btn) return;
+    compSeg.querySelectorAll('button').forEach(function (b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+    compFreq = btn.dataset.freq;
+    recalc();
+  });
+
+  /* ---------- reading + clamping inputs ---------- */
+  function readNum(key) {
+    var pair = els[key];
+    var min = parseFloat(pair.num.min), max = parseFloat(pair.num.max);
+    var v = parseFloat(pair.num.value);
+    if (!isFinite(v)) v = min;
+    v = Math.min(Math.max(v, min), max);
+    pair.num.value = v;
+    pair.slider.value = v;
+    return v;
+  }
+
+  /* ---------- core simulation: month-by-month, inflation step-up ---------- */
+  function simulate(curAge, lifeExp, startBal, monthly0, ratePct, inflPct, freq) {
+    var rows = [];
+    var balance = startBal;
+    var years = Math.max(0, lifeExp - curAge);
+    var rMonthly = ratePct / 100 / 12;
+    var rAnnual = ratePct / 100;
+    var infl = inflPct / 100;
+
+    for (var y = 0; y < years; y++) {
+      var monthly = monthly0 * Math.pow(1 + infl, y);
+      var row = { age: curAge + y, start: balance, wd: 0, interest: 0, end: balance };
+
+      if (balance > 0.005) {
+        if (freq === 'monthly') {
+          for (var m = 0; m < 12; m++) {
+            if (balance <= 0.005) break;
+            var interest = balance * rMonthly;
+            balance += interest;
+            row.interest += interest;
+            var w = Math.min(monthly, balance);   // never lets balance go negative
+            balance -= w;
+            row.wd += w;
+          }
+        } else {
+          var interestA = balance * rAnnual;
+          balance += interestA;
+          row.interest += interestA;
+          var wA = Math.min(monthly * 12, balance);
+          balance -= wA;
+          row.wd += wA;
+        }
+        if (balance < 0) balance = 0;
+      }
+      row.end = balance;
+      rows.push(row);
+      if (balance <= 0.005) break;               // depleted mid-way: stop
+    }
+    return rows;
+  }
+
+  /* ---------- master recalculation ---------- */
+  var chart = null;
+
+  function recalc() {
+    var curAge  = readNum('curAge');
+    var lifeExp = readNum('life');
+    var startBal = readNum('balance');
+    var monthly0 = readNum('withdraw');
+    var ratePct  = readNum('rate');
+    var inflPct  = readNum('infl');
+
+    if (lifeExp < curAge) {                       // keep plan sane
+      lifeExp = curAge;
+      els.life.num.value = lifeExp;
+      els.life.slider.value = lifeExp;
+    }
+
+    var rows = simulate(curAge, lifeExp, startBal, monthly0, ratePct, inflPct, compFreq);
+    var years = Math.max(0, lifeExp - curAge);
+    var last = rows.length ? rows[rows.length - 1] : null;
+    var depleted = !!(last && last.end <= 0.005 && last.age < lifeExp) ||
+                   (!!(last && last.end <= 0.005) && rows.length === years && years > 0);
+    var sustained = !depleted && years > 0;
+
+    var totalInterest = rows.reduce(function (s, r) { return s + r.interest; }, 0);
+    var totalWd = rows.reduce(function (s, r) { return s + r.wd; }, 0);
+
+    /* KPI cards */
+    var kpiRunout = $('kpiRunout'), kpiFinal = $('kpiFinal');
+    if (depleted) {
+      $('kpiInterest').querySelector('.k-value').textContent = fmtUSD(totalInterest);
+      $('kpiWithdrawn').querySelector('.k-value').textContent = fmtUSD(totalWd);
+      kpiRunout.querySelector('.k-value').textContent = 'Age ' + last.age;
+      kpiRunout.querySelector('.k-sub').textContent = 'portfolio exhausted during age ' + last.age;
+      kpiRunout.className = 'kpi bad';
+      $('kpiFinal').querySelector('.k-value').textContent = '$0';
+      $('kpiFinal').querySelector('.k-sub').textContent = 'nothing left to reach life expectancy';
+      kpiFinal.className = 'kpi bad';
+    } else {
+      $('kpiInterest').querySelector('.k-value').textContent = fmtUSD(totalInterest);
+      $('kpiWithdrawn').querySelector('.k-value').textContent = fmtUSD(totalWd);
+      kpiRunout.querySelector('.k-value').textContent = 'Sustained';
+      kpiRunout.querySelector('.k-sub').textContent = 'portfolio survives through age ' + lifeExp;
+      kpiRunout.className = 'kpi good';
+      $('kpiFinal').querySelector('.k-value').textContent = fmtUSD(rows[rows.length - 1].end);
+      $('kpiFinal').querySelector('.k-sub').textContent = 'ending balance at age ' + lifeExp;
+      kpiFinal.className = 'kpi good';
+    }
+    $('kpiInterest').className = 'kpi';
+    $('kpiWithdrawn').className = 'kpi';
+
+    var note = $('note');
+    if (curAge >= lifeExp) {
+      note.textContent = 'Life expectancy is set equal to current age \u2014 adjust life expectancy to run a projection.';
+      note.classList.add('show');
+    } else {
+      note.classList.remove('show');
+    }
+
+    renderChart(curAge, lifeExp, rows, years, depleted);
+    renderTable(rows, curAge, lifeExp, depleted);
+  }
+
+  /* ---------- Chart.js ---------- */
+  function renderChart(curAge, lifeExp, rows, years, depleted) {
+    var ages = [];
+    var values = [];
+    for (var i = 0; i <= years; i++) {
+      ages.push(curAge + i);
+      values.push(i < rows.length ? rows[i].end : 0);
+    }
+    var depIdx = depleted ? rows.length - 1 : null;
+
+    var ds1 = values.map(function (v, i) { return depIdx !== null && i > depIdx ? null : v; });
+    var ds2 = values.map(function (v, i) { return depIdx !== null && i >= depIdx ? Math.max(0, v) : null; });
+
+    if (chart) { chart.destroy(); chart = null; }   // no leaks on rapid updates
+
+    var grad = document.createElement('canvas').getContext('2d').createLinearGradient(0, 0, 0, 400);
+    grad.addColorStop(0, 'rgba(34,211,238,.32)');
+    grad.addColorStop(1, 'rgba(34,211,238,.02)');
+
+    var ctx = $('chart').getContext('2d');
+    chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: ages,
+        datasets: [
+          {
+            label: 'Portfolio Balance',
+            data: ds1,
+            borderColor: '#22d3ee',
+            backgroundColor: grad,
+            borderWidth: 2.5,
+            fill: true,
+            tension: 0.35,
+            pointRadius: 0,
+            pointHitRadius: 8
+          },
+          {
+            label: 'Depleted',
+            data: ds2,
+            borderColor: 'rgba(248,113,113,.9)',
+            backgroundColor: 'rgba(248,113,113,.12)',
+            borderWidth: 2,
+            borderDash: [6, 4],
+            fill: true,
+            tension: 0,
+            pointRadius: function (c) { return c.dataIndex === depIdx ? 7 : 0; },
+            pointBackgroundColor: '#f87171',
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2,
+            pointHoverRadius: 9
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: 'rgba(11,18,32,.92)',
+            titleColor: '#e6edf7',
+            bodyColor: '#8ea0bc',
+            borderColor: '#253356',
+            borderWidth: 1,
+            padding: 10,
+            callbacks: {
+              label: function (c) {
+                return c.dataset.label + ': ' + fmtUSD(c.parsed.y);
+              }
+            }
+          },
+          depletionMarker: { age: depIdx !== null ? ages[depIdx] : null }
+        },
+        scales: {
+          x: {
+            title: { display: true, text: 'Age', color: '#8ea0bc' },
+            grid: { color: 'rgba(37,51,86,.4)' },
+            ticks: { color: '#8ea0bc' }
+          },
+          y: {
+            title: { display: true, text: 'Portfolio Balance ($)', color: '#8ea0bc' },
+            grid: { color: 'rgba(37,51,86,.4)' },
+            ticks: {
+              color: '#8ea0bc',
+              callback: function (v) {
+                if (v >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
+                if (v >= 1e3) return '$' + (v / 1e3).toFixed(0) + 'k';
+                return '$' + v;
+              }
+            }
+          }
+        }
+      },
+      plugins: [depletionLinePlugin]
+    });
+  }
+
+  /* inline plugin: vertical dashed marker at the depletion age */
+  var depletionLinePlugin = {
+    id: 'depletionLine',
+    afterDatasetsDraw: function (chart) {
+      var age = chart.options.plugins.depletionMarker.age;
+      if (age === null || age === undefined) return;
+      var xScale = chart.scales.x;
+      var x = xScale.getPixelForValue(age);
+      var ctx = chart.ctx;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(248,113,113,.55)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.moveTo(x, chart.chartArea.top);
+      ctx.lineTo(x, chart.chartArea.bottom);
+      ctx.stroke();
+      ctx.restore();
+    }
+  };
+
+  /* ---------- year-by-year table ---------- */
+  function renderTable(rows, curAge, lifeExp, depleted) {
+    var tbody = $('tableBody');
+    tbody.innerHTML = '';
+
+    if (!rows.length) {
+      var empty = document.createElement('tr');
+      var td = document.createElement('td');
+      td.colSpan = 5;
+      td.textContent = 'No years to project \u2014 increase life expectancy above current age.';
+      empty.appendChild(td);
+      tbody.appendChild(empty);
+      return;
+    }
+
+    var frag = document.createDocumentFragment();
+    rows.forEach(function (r) {
+      var tr = document.createElement('tr');
+      if (depleted && r.age === rows[rows.length - 1].age && r.end <= 0.005) {
+        tr.className = 'depleted';
+      }
+      [[r.age, 'yrs'], [r.start, ''], [r.wd, ''], [r.interest, ''], [r.end, '']].forEach(function (cell) {
+        var td = document.createElement('td');
+        td.textContent = cell[1] ? cell[0].toLocaleString('en-US') + ' ' + cell[1] : fmtUSD(cell[0]);
+        tr.appendChild(td);
+      });
+      frag.appendChild(tr);
+    });
+
+    var tot = document.createElement('tr');
+    tot.className = 'total-row';
+    var t1 = document.createElement('td'); t1.textContent = 'TOTAL';
+    var t2 = document.createElement('td'); t2.textContent = '\u2014';
+    var t3 = document.createElement('td'); t3.textContent = fmtUSD(rows.reduce(function (s, r) { return s + r.wd; }, 0));
+    var t4 = document.createElement('td'); t4.textContent = fmtUSD(rows.reduce(function (s, r) { return s + r.interest; }, 0));
+    var t5 = document.createElement('td'); t5.textContent = fmtUSD(rows[rows.length - 1].end);
+    [t1, t2, t3, t4, t5].forEach(function (td) { tot.appendChild(td); });
+    frag.appendChild(tot);
+
+    tbody.appendChild(frag);
+  }
+
+  /* init */
+  recalc();
+})();
+</script>
+</body>
+</html>
