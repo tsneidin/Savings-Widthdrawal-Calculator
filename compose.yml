@@ -1,0 +1,13 @@
+name: savings-retirement-calculator
+
+services:
+  savings-retirement-calculator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: savings-retirement-calculator:latest
+    container_name: savings-retirement-calculator
+    hostname: savings-retirement-calculator
+    ports:
+      - "8080:80"
+    restart: unless-stopped
