@@ -1,0 +1,8 @@
+services:
+  savings-retirement-calculator:
+    build: .
+    image: savings-retirement-calculator:latest
+    container_name: savings-retirement-calculator
+    ports:
+      - "8080:80"          # host:container — change 8080 to any free port
+    restart: unless-stopped

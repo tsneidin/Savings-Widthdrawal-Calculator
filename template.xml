@@ -1,0 +1,24 @@
+<Container version="2">
+  <Name>SavingsRetirementCalculator</Name>
+  <Description>Savings &amp; Retirement Withdrawal Calculator - pension + Social Security drawdown simulator served from a lightweight nginx container.</Description>
+  <Overview>Self-contained retirement withdrawal calculator: month-by-month projection with pension reduction, Social Security phase-in, COLA, compounding options, and Chart.js visuals. Web UI on the configured port.</Overview>
+  <Category>Finance</Category>
+  <Repository>savings-retirement-calculator:latest</Repository>
+  <Registry></Registry>
+  <Network>bridge</Network>
+  <MyIP></MyIP>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support></Support>
+  <Project>https://github.com/tsneidin/Savings-Widthdrawal-Calculator</Project>
+  <TemplateURL></TemplateURL>
+  <WebUI>http://[IP]:[PORT:8080]/</WebUI>
+  <ExtraParams>--restart=unless-stopped</ExtraParams>
+  <PostArgs></PostArgs>
+  <CPUset></CPUset>
+  <DateInstalled></DateInstalled>
+  <DonateText></DonateText>
+  <DonateLink></DonateLink>
+  <Requires></Requires>
+  <Config Name="Web UI Port" Target="80" Default="8080" Mode="tcp" Description="Host port for the calculator web UI" Type="Port" Display="always" Required="true" Mask="false">8080</Config>
+</Container>

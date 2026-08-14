@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Savings &amp; Retirement Withdrawal Calculator</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="lib/chart.umd.min.js"></script>
 <style>
   :root{
     --bg:#0b1220;
@@ -33,7 +33,7 @@
   header{
     max-width:1440px;margin:0 auto;padding:28px 24px 6px;
   }
-  header h1{
+  h1{
     margin:0;font-size:clamp(1.35rem,2.6vw,1.9rem);font-weight:800;letter-spacing:-0.02em;
   }
   header p{
@@ -143,6 +143,14 @@
   .chart-legend .sw{display:inline-block;width:14px;height:4px;border-radius:2px;margin-right:6px;vertical-align:middle}
   .chart-legend .sw.red{background:var(--danger)}
   .chart-legend .sw.teal{background:var(--accent)}
+  .chart-legend .sw.amber{background:var(--warn)}
+  .chart-legend .sw.green{background:var(--ok)}
+  .chart-legend .sw.dash{background:none;height:0;border-top:2px dashed #93c5fd}
+
+  .panel-title{
+    margin:26px 0 12px;font-size:.95rem;font-weight:700;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--muted);
+  }
 
   details{
     margin-top:18px;background:var(--card);border:1px solid var(--line);
@@ -221,13 +229,79 @@
 
     <div class="control">
       <div class="control-head">
-        <label for="withdrawNum">Monthly Withdrawal Amount</label>
+        <label for="withdrawNum">Monthly Spending / Withdrawal</label>
         <div class="input-wrap">
           <span class="unit">$</span>
           <input type="number" id="withdrawNum" min="0" max="50000" step="100" value="4000">
         </div>
       </div>
       <input type="range" id="withdrawSlider" min="0" max="50000" step="100" value="4000">
+    </div>
+
+    <div class="control">
+      <div class="control-head">
+        <label for="pensionNum">Monthly Pension (before reduction)</label>
+        <div class="input-wrap">
+          <span class="unit">$</span>
+          <input type="number" id="pensionNum" min="0" max="20000" step="100" value="4000">
+        </div>
+      </div>
+      <input type="range" id="pensionSlider" min="0" max="20000" step="100" value="4000">
+    </div>
+
+    <div class="control">
+      <div class="control-head">
+        <label for="reduceNum">Pension Reduces At Age</label>
+        <div class="input-wrap">
+          <input type="number" id="reduceNum" min="40" max="100" step="1" value="62">
+          <span class="unit">yrs</span>
+        </div>
+      </div>
+      <input type="range" id="reduceSlider" min="40" max="100" step="1" value="62">
+    </div>
+
+    <div class="control">
+      <div class="control-head">
+        <label for="reducedNum">Monthly Pension (after reduction)</label>
+        <div class="input-wrap">
+          <span class="unit">$</span>
+          <input type="number" id="reducedNum" min="0" max="20000" step="100" value="2200">
+        </div>
+      </div>
+      <input type="range" id="reducedSlider" min="0" max="20000" step="100" value="2200">
+    </div>
+
+    <div class="control">
+      <div class="control-head">
+        <label for="ssNum">Monthly Social Security</label>
+        <div class="input-wrap">
+          <span class="unit">$</span>
+          <input type="number" id="ssNum" min="0" max="20000" step="100" value="2400">
+        </div>
+      </div>
+      <input type="range" id="ssSlider" min="0" max="20000" step="100" value="2400">
+    </div>
+
+    <div class="control">
+      <div class="control-head">
+        <label for="ssAgeNum">Social Security Starts At Age</label>
+        <div class="input-wrap">
+          <input type="number" id="ssAgeNum" min="40" max="100" step="1" value="62">
+          <span class="unit">yrs</span>
+        </div>
+      </div>
+      <input type="range" id="ssAgeSlider" min="40" max="100" step="1" value="62">
+    </div>
+
+    <div class="control">
+      <div class="control-head">
+        <label for="colaNum">Pension COLA</label>
+        <div class="input-wrap">
+          <input type="number" id="colaNum" min="0" max="10" step="0.1" value="2">
+          <span class="unit">%</span>
+        </div>
+      </div>
+      <input type="range" id="colaSlider" min="0" max="10" step="0.1" value="2">
     </div>
 
     <div class="control">
@@ -261,8 +335,9 @@
     </div>
 
     <p class="hint">
-      Withdrawals step up by the inflation rate each year. The simulation runs month-by-month and stops the
-      moment the portfolio is exhausted, so results show exactly when savings run dry.
+      Your spending need steps up by the inflation rate each year. Pension and Social Security income are
+      subtracted from that need month-by-month &mdash; only the shortfall is drawn from the portfolio. The simulation
+      stops the moment savings run dry.
     </p>
     <div class="note" id="note" role="status"></div>
   </section>
@@ -300,6 +375,17 @@
       <span><span class="sw red"></span>Depleted (runs out at age marked &bull;)</span>
     </div>
 
+    <h2 class="panel-title">Where Funding Comes From</h2>
+    <div class="chart-wrap">
+      <canvas id="sourceChart"></canvas>
+    </div>
+    <div class="chart-legend">
+      <span><span class="sw amber"></span>Pension income</span>
+      <span><span class="sw green"></span>Social Security</span>
+      <span><span class="sw red"></span>Drawn from savings</span>
+      <span><span class="sw dash"></span>Spending need</span>
+    </div>
+
     <details>
       <summary>Year-by-Year Breakdown (collapsible)</summary>
       <div class="table-scroll">
@@ -319,9 +405,11 @@
 
 <footer>
   <p>
-    Simulation notes: interest compounds <code>monthly</code> or <code>annually</code> per your selection;
-    the monthly withdrawal rises each year by the inflation rate. Rates are treated as nominal gross returns
-    &mdash; subtract your effective tax drag from the return input to model after-tax performance. All values in USD.
+    Simulation notes: pension income pays at the pre-reduction rate until the "Pension Reduces At" age, then the
+    reduced rate, both compounding by the pension COLA. Social Security starts at its start age and is treated as
+    flat (no COLA). Only the shortfall between your inflation-adjusted spending need and income is drawn from the
+    portfolio. Interest compounds <code>monthly</code> or <code>annually</code> per your selection. Rates are
+    nominal gross returns &mdash; subtract your effective tax drag to model after-tax performance. All values in USD.
   </p>
 </footer>
 
@@ -336,6 +424,12 @@
     life:     { slider: $('lifeSlider'),    num: $('lifeNum') },
     balance:  { slider: $('balanceSlider'), num: $('balanceNum') },
     withdraw: { slider: $('withdrawSlider'),num: $('withdrawNum') },
+    pension:  { slider: $('pensionSlider'), num: $('pensionNum') },
+    reduce:   { slider: $('reduceSlider'),  num: $('reduceNum') },
+    reduced:  { slider: $('reducedSlider'), num: $('reducedNum') },
+    ss:       { slider: $('ssSlider'),      num: $('ssNum') },
+    ssAge:    { slider: $('ssAgeSlider'),   num: $('ssAgeNum') },
+    cola:     { slider: $('colaSlider'),    num: $('colaNum') },
     rate:     { slider: $('rateSlider'),    num: $('rateNum') },
     infl:     { slider: $('inflSlider'),    num: $('inflNum') }
   };
@@ -346,7 +440,6 @@
     if (!isFinite(v)) v = 0;
     return '$' + Math.round(v).toLocaleString('en-US');
   };
-  var fmtPct = function (v) { return v.toFixed(1) + '%'; };
 
   /* ---------- bidirectional slider <-> number binding ---------- */
   Object.keys(els).forEach(function (key) {
@@ -383,17 +476,23 @@
   }
 
   /* ---------- core simulation: month-by-month, inflation step-up ---------- */
-  function simulate(curAge, lifeExp, startBal, monthly0, ratePct, inflPct, freq) {
+  function simulate(curAge, lifeExp, startBal, monthly0, ratePct, inflPct, freq, income) {
     var rows = [];
     var balance = startBal;
     var years = Math.max(0, lifeExp - curAge);
     var rMonthly = ratePct / 100 / 12;
     var rAnnual = ratePct / 100;
     var infl = inflPct / 100;
+    income = income || { p1: 0, reduce: 200, p2: 0, ss: 0, ssAge: 200, cola: 0 };
 
     for (var y = 0; y < years; y++) {
-      var monthly = monthly0 * Math.pow(1 + infl, y);
-      var row = { age: curAge + y, start: balance, wd: 0, interest: 0, end: balance };
+      var age = curAge + y;
+      var need = monthly0 * Math.pow(1 + infl, y);           // spending need (inflation-indexed)
+      var pensBase = (age < income.reduce) ? income.p1 : income.p2;
+      var pens = pensBase * Math.pow(1 + income.cola / 100, y);  // pension grows by COLA
+      var ssInc = (age >= income.ssAge) ? income.ss : 0;
+      var net = Math.max(0, need - pens - ssInc);            // shortfall drawn from portfolio
+      var row = { age: age, start: balance, wd: 0, interest: 0, end: balance };
 
       if (balance > 0.005) {
         if (freq === 'monthly') {
@@ -402,7 +501,7 @@
             var interest = balance * rMonthly;
             balance += interest;
             row.interest += interest;
-            var w = Math.min(monthly, balance);   // never lets balance go negative
+            var w = Math.min(net, balance);                  // never lets balance go negative
             balance -= w;
             row.wd += w;
           }
@@ -410,7 +509,7 @@
           var interestA = balance * rAnnual;
           balance += interestA;
           row.interest += interestA;
-          var wA = Math.min(monthly * 12, balance);
+          var wA = Math.min(net * 12, balance);
           balance -= wA;
           row.wd += wA;
         }
@@ -425,6 +524,7 @@
 
   /* ---------- master recalculation ---------- */
   var chart = null;
+  var sourceChart = null;
 
   function recalc() {
     var curAge  = readNum('curAge');
@@ -440,7 +540,16 @@
       els.life.slider.value = lifeExp;
     }
 
-    var rows = simulate(curAge, lifeExp, startBal, monthly0, ratePct, inflPct, compFreq);
+    var income = {
+      p1: readNum('pension'),
+      reduce: readNum('reduce'),
+      p2: readNum('reduced'),
+      ss: readNum('ss'),
+      ssAge: readNum('ssAge'),
+      cola: readNum('cola')
+    };
+
+    var rows = simulate(curAge, lifeExp, startBal, monthly0, ratePct, inflPct, compFreq, income);
     var years = Math.max(0, lifeExp - curAge);
     var last = rows.length ? rows[rows.length - 1] : null;
     var depleted = !!(last && last.end <= 0.005 && last.age < lifeExp) ||
@@ -483,6 +592,7 @@
     }
 
     renderChart(curAge, lifeExp, rows, years, depleted);
+    renderSourceChart(curAge, years, rows, monthly0, inflPct, income);
     renderTable(rows, curAge, lifeExp, depleted);
   }
 
@@ -584,7 +694,53 @@
     });
   }
 
-  /* inline plugin: vertical dashed marker at the depletion age */
+  /* ---------- funding sources stacked bar chart ---------- */
+  function renderSourceChart(curAge, years, rows, monthly0, inflPct, income) {
+    var ages = [], pens = [], ss = [], draw = [], needA = [];
+    for (var i = 0; i <= years; i++) {
+      var age = curAge + i;
+      var pensBase = (age < income.reduce) ? income.p1 : income.p2;
+      ages.push(age);
+      pens.push(pensBase * Math.pow(1 + income.cola / 100, i) * 12);   // annual pension inflow
+      ss.push((age >= income.ssAge) ? income.ss * 12 : 0);             // annual Social Security inflow
+      draw.push(i < rows.length ? rows[i].wd : 0);                     // actual annual shortfall drawn
+      needA.push(monthly0 * Math.pow(1 + inflPct / 100, i) * 12);        // annual spending need
+    }
+
+    if (sourceChart) { sourceChart.destroy(); sourceChart = null; }
+
+    var sctx = $('sourceChart').getContext('2d');
+    sourceChart = new Chart(sctx, {
+      type: 'bar',
+      data: {
+        labels: ages,
+        datasets: [
+          { label: 'Pension income', data: pens, stack: 'funds', backgroundColor: 'rgba(251,191,36,.85)', borderWidth: 0, borderRadius: 3 },
+          { label: 'Social Security', data: ss, stack: 'funds', backgroundColor: 'rgba(52,211,153,.85)', borderWidth: 0 },
+          { label: 'Drawn from savings', data: draw, stack: 'funds', backgroundColor: 'rgba(248,113,113,.85)', borderWidth: 0 },
+          { label: 'Spending need', data: needA, type: 'line', borderColor: '#93c5fd', borderWidth: 1.5, borderDash: [6, 4], fill: false, pointRadius: 0, tension: 0 }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: { stacked: true, title: { display: true, text: 'Age', color: '#8ea0bc' }, grid: { color: 'rgba(37,51,86,.4)' }, ticks: { color: '#8ea0bc' } },
+          y: { stacked: true, title: { display: true, text: 'Annual funding ($)', color: '#8ea0bc' }, grid: { color: 'rgba(37,51,86,.4)' }, ticks: { color: '#8ea0bc', callback: function (v) { if (v >= 1e6) return '$' + (v/1e6).toFixed(1)+'M'; return '$' + (v/1e3).toFixed(0)+'k'; } } }
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: 'rgba(11,18,32,.92)', titleColor: '#e6edf7', bodyColor: '#8ea0bc',
+            borderColor: '#253356', borderWidth: 1, padding: 10,
+            callbacks: { label: function (c) { return c.dataset.label + ': ' + fmtUSD(c.parsed.y); } }
+          }
+        }
+      }
+    });
+  }
+
   var depletionLinePlugin = {
     id: 'depletionLine',
     afterDatasetsDraw: function (chart) {

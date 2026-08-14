@@ -95,6 +95,28 @@ check('annual > monthly interest when withdrawing during the year', iA > iM,
 check('...yet final balances match monthly/annual compounding identity within tolerance',
   Math.abs(m8[29].end - a8[29].end) < 60000, m8[29].end.toFixed(0) + ' vs ' + a8[29].end.toFixed(0));
 
+console.log('Test 9 - retirement income: fixed pension covers spending (no SS, zero everything):');
+const r9 = simulate(60, 90, 100000, 3000, 0, 0, 'monthly', { p1: 4000, reduce: 200, p2: 0, ss: 0, ssAge: 200, cola: 0 });
+check('no shortfall -> zero withdrawals every year', r9.every(r => r.wd === 0), 'wd=' + sum(r9, r => r.wd));
+check('balance never moves (no interest, no draw)', r9.every(r => Math.abs(r.end - 100000) < 0.01) && r9.length === 30);
+
+console.log('Test 10 - pension reduction + SS "bucket switch" (exact cash flow):');
+// $3,000/mo spending, $1,000 pension (COLA 0) until 200, no SS: draw $2,000/mo from $100k savings.
+const r11 = simulate(60, 62, 100000, 3000, 0, 0, 'monthly', { p1: 1000, reduce: 62, p2: 0, ss: 0, ssAge: 200, cola: 0 });
+// two full years of $24k draws on a $100k balance
+check('two rows, each net $24k (age 60, 61)', r11.length === 2 && r11[0].wd === 24000 && r11[1].wd === 24000,
+  r11.map(r => r.wd).join(','));
+check('ends with 100k - 48k = 52k', Math.abs(r11[r11.length - 1].end - 52000) < 0.01, r11[r11.length - 1].end);
+// Social Security kicks in at 62: no further draws.
+const r12 = simulate(60, 65, 100000, 3000, 0, 0, 'monthly', { p1: 0, reduce: 61, p2: 0, ss: 3000, ssAge: 62, cola: 0 });
+check('pensions & SS cover from 62: balances constant', r12[0].wd === 36000 && r12[2].wd === 0 && r12[2].end === r12[1].end,
+  'y0wd=' + r12[0].wd + ' wd@62=' + r12[2].wd);
+
+console.log('Test 11 - pension COLA grows only the pension legs (2%/yr):');
+// Need $4,000/mo, pension $4,000 with 2% COLA -> income exceeds need from year 1 on -> never draw.
+const r13 = simulate(60, 70, 100000, 4000, 0, 0, 'monthly', { p1: 4000, reduce: 62, p2: 2200, ss: 2400, ssAge: 62, cola: 2 });
+check('income always >= need with COLA: never a withdrawal', r13.every(r => r.wd === 0), 'wd=' + sum(r13, r => r.wd));
+
 console.log('');
 console.log(pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
