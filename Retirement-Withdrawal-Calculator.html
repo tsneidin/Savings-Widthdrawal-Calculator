@@ -386,6 +386,15 @@
       <span><span class="sw dash"></span>Spending need</span>
     </div>
 
+    <h2 class="panel-title">Cumulative Spending</h2>
+    <div class="chart-wrap">
+      <canvas id="spendChart"></canvas>
+    </div>
+    <div class="chart-legend">
+      <span><span class="sw teal"></span>Cumulative spending (inflation-adjusted)</span>
+      <span><span class="sw red"></span>Cumulative drawn from savings</span>
+    </div>
+
     <details>
       <summary>Year-by-Year Breakdown (collapsible)</summary>
       <div class="table-scroll">
@@ -525,6 +534,7 @@
   /* ---------- master recalculation ---------- */
   var chart = null;
   var sourceChart = null;
+  var spendChart = null;
 
   function recalc() {
     var curAge  = readNum('curAge');
@@ -593,6 +603,7 @@
 
     renderChart(curAge, lifeExp, rows, years, depleted);
     renderSourceChart(curAge, years, rows, monthly0, inflPct, income);
+    renderCumSpendingChart(curAge, years, rows, monthly0, inflPct);
     renderTable(rows, curAge, lifeExp, depleted);
   }
 
@@ -728,6 +739,70 @@
         scales: {
           x: { stacked: true, title: { display: true, text: 'Age', color: '#8ea0bc' }, grid: { color: 'rgba(37,51,86,.4)' }, ticks: { color: '#8ea0bc' } },
           y: { stacked: true, title: { display: true, text: 'Annual funding ($)', color: '#8ea0bc' }, grid: { color: 'rgba(37,51,86,.4)' }, ticks: { color: '#8ea0bc', callback: function (v) { if (v >= 1e6) return '$' + (v/1e6).toFixed(1)+'M'; return '$' + (v/1e3).toFixed(0)+'k'; } } }
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: 'rgba(11,18,32,.92)', titleColor: '#e6edf7', bodyColor: '#8ea0bc',
+            borderColor: '#253356', borderWidth: 1, padding: 10,
+            callbacks: { label: function (c) { return c.dataset.label + ': ' + fmtUSD(c.parsed.y); } }
+          }
+        }
+      }
+    });
+  }
+
+  /* ---------- cumulative spending chart ---------- */
+  function renderCumSpendingChart(curAge, years, rows, monthly0, inflPct) {
+    var ages = [], cumSpend = [], cumDraw = [];
+    var spend = 0, draw = 0;
+    for (var i = 0; i <= years; i++) {
+      spend += monthly0 * Math.pow(1 + inflPct / 100, i) * 12;   // running total of monthly need
+      draw += (i < rows.length) ? rows[i].wd : 0;                // running total drawn from savings
+      ages.push(curAge + i);
+      cumSpend.push(spend);
+      cumDraw.push(draw);
+    }
+
+    if (spendChart) { spendChart.destroy(); spendChart = null; }
+
+    var sctx = $('spendChart').getContext('2d');
+    spendChart = new Chart(sctx, {
+      type: 'line',
+      data: {
+        labels: ages,
+        datasets: [
+          {
+            label: 'Cumulative spending',
+            data: cumSpend,
+            borderColor: '#22d3ee',
+            backgroundColor: 'rgba(34,211,238,.12)',
+            borderWidth: 2.5,
+            fill: true,
+            tension: 0.35,
+            pointRadius: 0,
+            pointHitRadius: 8
+          },
+          {
+            label: 'Cumulative savings draw',
+            data: cumDraw,
+            borderColor: '#f87171',
+            borderDash: [6, 4],
+            borderWidth: 2,
+            fill: false,
+            tension: 0,
+            pointRadius: 0,
+            pointHitRadius: 8
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: { title: { display: true, text: 'Age', color: '#8ea0bc' }, grid: { color: 'rgba(37,51,86,.4)' }, ticks: { color: '#8ea0bc' } },
+          y: { title: { display: true, text: 'Cumulative ($)', color: '#8ea0bc' }, grid: { color: 'rgba(37,51,86,.4)' }, ticks: { color: '#8ea0bc', callback: function (v) { if (v >= 1e6) return '$' + (v/1e6).toFixed(1)+'M'; return '$' + (v/1e3).toFixed(0)+'k'; } } }
         },
         plugins: {
           legend: { display: false },
