@@ -386,13 +386,15 @@
       <span><span class="sw dash"></span>Spending need</span>
     </div>
 
-    <h2 class="panel-title">Cumulative Spending</h2>
+    <h2 class="panel-title">Monthly Spending &amp; Income</h2>
     <div class="chart-wrap">
       <canvas id="spendChart"></canvas>
     </div>
     <div class="chart-legend">
-      <span><span class="sw teal"></span>Cumulative spending (inflation-adjusted)</span>
-      <span><span class="sw red"></span>Cumulative drawn from savings</span>
+      <span><span class="sw teal"></span>Monthly spending need</span>
+      <span><span class="sw amber"></span>Monthly pension</span>
+      <span><span class="sw green"></span>Monthly Social Security</span>
+      <span><span class="sw red"></span>Monthly drawn from savings</span>
     </div>
 
     <details>
@@ -603,7 +605,7 @@
 
     renderChart(curAge, lifeExp, rows, years, depleted);
     renderSourceChart(curAge, years, rows, monthly0, inflPct, income);
-    renderCumSpendingChart(curAge, years, rows, monthly0, inflPct);
+    renderCumSpendingChart(curAge, years, rows, monthly0, inflPct, income);
     renderTable(rows, curAge, lifeExp, depleted);
   }
 
@@ -752,16 +754,17 @@
     });
   }
 
-  /* ---------- cumulative spending chart ---------- */
-  function renderCumSpendingChart(curAge, years, rows, monthly0, inflPct) {
-    var ages = [], cumSpend = [], cumDraw = [];
-    var spend = 0, draw = 0;
+  /* ---------- monthly spending & income chart ---------- */
+  function renderCumSpendingChart(curAge, years, rows, monthly0, inflPct, income) {
+    var ages = [], need = [], pens = [], ss = [], draw = [];
     for (var i = 0; i <= years; i++) {
-      spend += monthly0 * Math.pow(1 + inflPct / 100, i) * 12;   // running total of monthly need
-      draw += (i < rows.length) ? rows[i].wd : 0;                // running total drawn from savings
-      ages.push(curAge + i);
-      cumSpend.push(spend);
-      cumDraw.push(draw);
+      var age = curAge + i;
+      var pensBase = (age < income.reduce) ? income.p1 : income.p2;
+      ages.push(age);
+      need.push(monthly0 * Math.pow(1 + inflPct / 100, i));                    // monthly spending need
+      pens.push(pensBase * Math.pow(1 + income.cola / 100, i));                // monthly pension (COLA'd)
+      ss.push((age >= income.ssAge) ? income.ss : 0);                          // monthly Social Security
+      draw.push(i < rows.length ? rows[i].wd / 12 : 0);                        // monthly drawn from savings
     }
 
     if (spendChart) { spendChart.destroy(); spendChart = null; }
@@ -772,28 +775,10 @@
       data: {
         labels: ages,
         datasets: [
-          {
-            label: 'Cumulative spending',
-            data: cumSpend,
-            borderColor: '#22d3ee',
-            backgroundColor: 'rgba(34,211,238,.12)',
-            borderWidth: 2.5,
-            fill: true,
-            tension: 0.35,
-            pointRadius: 0,
-            pointHitRadius: 8
-          },
-          {
-            label: 'Cumulative savings draw',
-            data: cumDraw,
-            borderColor: '#f87171',
-            borderDash: [6, 4],
-            borderWidth: 2,
-            fill: false,
-            tension: 0,
-            pointRadius: 0,
-            pointHitRadius: 8
-          }
+          { label: 'Spending need', data: need, borderColor: '#22d3ee', borderWidth: 2.5, fill: false, tension: 0.35, pointRadius: 0, pointHitRadius: 8 },
+          { label: 'Pension', data: pens, borderColor: '#fbbf24', borderWidth: 2, fill: false, tension: 0.35, pointRadius: 0, pointHitRadius: 8 },
+          { label: 'Social Security', data: ss, borderColor: '#4ade80', borderWidth: 2, fill: false, tension: 0.35, pointRadius: 0, pointHitRadius: 8 },
+          { label: 'Drawn from savings', data: draw, borderColor: '#f87171', borderDash: [6, 4], borderWidth: 2, fill: false, tension: 0, pointRadius: 0, pointHitRadius: 8 }
         ]
       },
       options: {
@@ -802,14 +787,14 @@
         interaction: { mode: 'index', intersect: false },
         scales: {
           x: { title: { display: true, text: 'Age', color: '#8ea0bc' }, grid: { color: 'rgba(37,51,86,.4)' }, ticks: { color: '#8ea0bc' } },
-          y: { title: { display: true, text: 'Cumulative ($)', color: '#8ea0bc' }, grid: { color: 'rgba(37,51,86,.4)' }, ticks: { color: '#8ea0bc', callback: function (v) { if (v >= 1e6) return '$' + (v/1e6).toFixed(1)+'M'; return '$' + (v/1e3).toFixed(0)+'k'; } } }
+          y: { title: { display: true, text: 'Per month ($)', color: '#8ea0bc' }, grid: { color: 'rgba(37,51,86,.4)' }, ticks: { color: '#8ea0bc', callback: function (v) { return '$' + (v/1e3).toFixed(0)+'k'; } } }
         },
         plugins: {
           legend: { display: false },
           tooltip: {
             backgroundColor: 'rgba(11,18,32,.92)', titleColor: '#e6edf7', bodyColor: '#8ea0bc',
             borderColor: '#253356', borderWidth: 1, padding: 10,
-            callbacks: { label: function (c) { return c.dataset.label + ': ' + fmtUSD(c.parsed.y); } }
+            callbacks: { label: function (c) { return c.dataset.label + ': ' + fmtUSD(c.parsed.y) + '/mo'; } }
           }
         }
       }

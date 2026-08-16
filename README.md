@@ -44,7 +44,7 @@ To remove: `docker rm -f savings-retirement-calculator && docker rmi savings-ret
 - **KPI cards** – total interest earned, total funds withdrawn, the age your money runs out (or *Sustained*), and end-of-period balance.
 - **Portfolio chart** – balance over age with a shaded area; the tail after depletion renders red with a run-out marker.
 - **"Where Funding Comes From" chart** – a 100% stacked bar graph breaking each year's inflows into **pension**, **Social Security**, and **savings drawdown**, with a dashed line marking the spending need.
-- **Cumulative spending chart** – running totals over age: total inflation-adjusted spending versus the total actually drawn from savings.
+- **Monthly spending & income chart** – per-year monthly figures as lines: spending need, pension, Social Security, and the amount drawn from savings each month.
 - **Collapsible year-by-year table** – age, starting balance, withdrawals, interest, ending balance, with totals.
 
 ## Math model
