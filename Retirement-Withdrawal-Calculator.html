@@ -430,7 +430,7 @@
           <thead>
             <tr>
               <th>Age</th><th>Starting Balance</th><th>Total Withdrawals</th>
-              <th>Interest Earned</th><th>Ending Balance</th>
+              <th>Drawdown %</th><th>Interest Earned</th><th>Ending Balance</th>
             </tr>
           </thead>
           <tbody id="tableBody"></tbody>
@@ -652,7 +652,7 @@
     } else {
       var effRate = startBal > 0 ? monthly0 * 12 / startBal * 100 : 0;
       kpiDraw.querySelector('.k-value').textContent = effRate.toFixed(1) + '%';
-      kpiDraw.querySelector('.k-sub').textContent = 'of starting balance per year';
+      kpiDraw.querySelector('.k-sub').textContent = 'of portfolio balance at age ' + curAge + ' \u2014 varies as balance changes';
     }
 
     var note = $('note');
@@ -889,7 +889,7 @@
     if (!rows.length) {
       var empty = document.createElement('tr');
       var td = document.createElement('td');
-      td.colSpan = 5;
+      td.colSpan = 6;
       td.textContent = 'No years to project \u2014 increase life expectancy above current age.';
       empty.appendChild(td);
       tbody.appendChild(empty);
@@ -902,9 +902,11 @@
       if (depleted && r.age === rows[rows.length - 1].age && r.end <= 0.005) {
         tr.className = 'depleted';
       }
-      [[r.age, 'yrs'], [r.start, ''], [r.wd, ''], [r.interest, ''], [r.end, '']].forEach(function (cell) {
+      [[r.age, 'yrs'], [r.start, ''], [r.wd, ''], [r.start > 0 ? r.wd / r.start * 100 : 0, '%'], [r.interest, ''], [r.end, '']].forEach(function (cell) {
         var td = document.createElement('td');
-        td.textContent = cell[1] ? cell[0].toLocaleString('en-US') + ' ' + cell[1] : fmtUSD(cell[0]);
+        td.textContent = cell[1] === '%' ? cell[0].toFixed(1) + '%'
+          : cell[1] ? cell[0].toLocaleString('en-US') + ' ' + cell[1]
+          : fmtUSD(cell[0]);
         tr.appendChild(td);
       });
       frag.appendChild(tr);
@@ -915,9 +917,10 @@
     var t1 = document.createElement('td'); t1.textContent = 'TOTAL';
     var t2 = document.createElement('td'); t2.textContent = '\u2014';
     var t3 = document.createElement('td'); t3.textContent = fmtUSD(rows.reduce(function (s, r) { return s + r.wd; }, 0));
-    var t4 = document.createElement('td'); t4.textContent = fmtUSD(rows.reduce(function (s, r) { return s + r.interest; }, 0));
-    var t5 = document.createElement('td'); t5.textContent = fmtUSD(rows[rows.length - 1].end);
-    [t1, t2, t3, t4, t5].forEach(function (td) { tot.appendChild(td); });
+    var t4 = document.createElement('td'); t4.textContent = '\u2014';
+    var t5 = document.createElement('td'); t5.textContent = fmtUSD(rows.reduce(function (s, r) { return s + r.interest; }, 0));
+    var t6 = document.createElement('td'); t6.textContent = fmtUSD(rows[rows.length - 1].end);
+    [t1, t2, t3, t4, t5, t6].forEach(function (td) { tot.appendChild(td); });
     frag.appendChild(tot);
 
     tbody.appendChild(frag);
