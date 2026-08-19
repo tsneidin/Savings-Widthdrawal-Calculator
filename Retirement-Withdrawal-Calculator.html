@@ -114,6 +114,7 @@
     display:none;
   }
   .note.show{display:block}
+  .hidden{display:none}
 
   .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:18px}
   .kpi{
@@ -227,7 +228,7 @@
       <input type="range" id="balanceSlider" min="0" max="10000000" step="10000" value="1000000">
     </div>
 
-    <div class="control">
+    <div class="control" id="withdrawControl">
       <div class="control-head">
         <label for="withdrawNum">Monthly Spending / Withdrawal</label>
         <div class="input-wrap">
@@ -236,6 +237,25 @@
         </div>
       </div>
       <input type="range" id="withdrawSlider" min="0" max="50000" step="100" value="4000">
+    </div>
+
+    <div class="control">
+      <label style="margin-bottom:-2px">Withdrawal Method</label>
+      <div class="seg" id="methodSeg">
+        <button type="button" data-method="fixed" class="active">Fixed $ / month</button>
+        <button type="button" data-method="pct">% of Balance</button>
+      </div>
+    </div>
+
+    <div class="control hidden" id="drawRateControl">
+      <div class="control-head">
+        <label for="drawRateNum">Annual Drawdown Rate</label>
+        <div class="input-wrap">
+          <input type="number" id="drawRateNum" min="0" max="20" step="0.1" value="4">
+          <span class="unit">%</span>
+        </div>
+      </div>
+      <input type="range" id="drawRateSlider" min="0" max="20" step="0.1" value="4">
     </div>
 
     <div class="control">
@@ -335,9 +355,10 @@
     </div>
 
     <p class="hint">
-      Your spending need steps up by the inflation rate each year. Pension and Social Security income are
-      subtracted from that need month-by-month &mdash; only the shortfall is drawn from the portfolio. The simulation
-      stops the moment savings run dry.
+      Withdrawal method: <b>Fixed $ / month</b> draws an inflation-adjusted dollar amount each month;
+      <b>% of Balance</b> draws the selected percentage of the current portfolio monthly (a classic "4% rule"
+      style approach). Pension and Social Security income are subtracted from the need month-by-month &mdash;
+      only the shortfall is drawn from savings. The simulation stops the moment savings run dry.
     </p>
     <div class="note" id="note" role="status"></div>
   </section>
@@ -364,6 +385,11 @@
         <div class="k-label">Balance At Age</div>
         <div class="k-value">$0</div>
         <div class="k-sub">ending balance at life expectancy</div>
+      </div>
+      <div class="kpi" id="kpiDraw">
+        <div class="k-label">Drawdown Rate</div>
+        <div class="k-value">0%</div>
+        <div class="k-sub">of starting balance per year</div>
       </div>
     </div>
 
@@ -441,11 +467,14 @@
     ss:       { slider: $('ssSlider'),      num: $('ssNum') },
     ssAge:    { slider: $('ssAgeSlider'),   num: $('ssAgeNum') },
     cola:     { slider: $('colaSlider'),    num: $('colaNum') },
+    drawRate: { slider: $('drawRateSlider'), num: $('drawRateNum') },
     rate:     { slider: $('rateSlider'),    num: $('rateNum') },
     infl:     { slider: $('inflSlider'),    num: $('inflNum') }
   };
   var compSeg = $('compSeg');
   var compFreq = 'monthly';
+  var methodSeg = $('methodSeg');
+  var method = 'fixed';
 
   var fmtUSD = function (v) {
     if (!isFinite(v)) v = 0;
@@ -474,6 +503,17 @@
     recalc();
   });
 
+  methodSeg.addEventListener('click', function (e) {
+    var btn = e.target.closest('button');
+    if (!btn) return;
+    methodSeg.querySelectorAll('button').forEach(function (b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+    method = btn.dataset.method;
+    $('withdrawControl').classList.toggle('hidden', method === 'pct');
+    $('drawRateControl').classList.toggle('hidden', method === 'fixed');
+    recalc();
+  });
+
   /* ---------- reading + clamping inputs ---------- */
   function readNum(key) {
     var pair = els[key];
@@ -487,7 +527,7 @@
   }
 
   /* ---------- core simulation: month-by-month, inflation step-up ---------- */
-  function simulate(curAge, lifeExp, startBal, monthly0, ratePct, inflPct, freq, income) {
+  function simulate(curAge, lifeExp, startBal, monthly0, ratePct, inflPct, freq, income, mode, drawPct) {
     var rows = [];
     var balance = startBal;
     var years = Math.max(0, lifeExp - curAge);
@@ -495,15 +535,16 @@
     var rAnnual = ratePct / 100;
     var infl = inflPct / 100;
     income = income || { p1: 0, reduce: 200, p2: 0, ss: 0, ssAge: 200, cola: 0 };
+    mode = mode || 'fixed';
+    drawPct = (drawPct === undefined || drawPct === null) ? 4 : drawPct;
 
     for (var y = 0; y < years; y++) {
       var age = curAge + y;
-      var need = monthly0 * Math.pow(1 + infl, y);           // spending need (inflation-indexed)
+      var need0 = monthly0 * Math.pow(1 + infl, y);              // fixed-$ monthly need for this year
       var pensBase = (age < income.reduce) ? income.p1 : income.p2;
       var pens = pensBase * Math.pow(1 + income.cola / 100, y);  // pension grows by COLA
       var ssInc = (age >= income.ssAge) ? income.ss : 0;
-      var net = Math.max(0, need - pens - ssInc);            // shortfall drawn from portfolio
-      var row = { age: age, start: balance, wd: 0, interest: 0, end: balance };
+      var row = { age: age, start: balance, wd: 0, interest: 0, need: 0, end: balance };
 
       if (balance > 0.005) {
         if (freq === 'monthly') {
@@ -512,7 +553,10 @@
             var interest = balance * rMonthly;
             balance += interest;
             row.interest += interest;
-            var w = Math.min(net, balance);                  // never lets balance go negative
+            var needM = (mode === 'pct') ? balance * drawPct / 100 / 12 : need0;
+            row.need += needM;
+            var net = Math.max(0, needM - pens - ssInc);         // shortfall drawn from portfolio
+            var w = Math.min(net, balance);                      // never lets balance go negative
             balance -= w;
             row.wd += w;
           }
@@ -520,7 +564,10 @@
           var interestA = balance * rAnnual;
           balance += interestA;
           row.interest += interestA;
-          var wA = Math.min(net * 12, balance);
+          var needY = (mode === 'pct') ? balance * drawPct / 100 : need0 * 12;
+          row.need += needY;
+          var netA = Math.max(0, needY - (pens + ssInc) * 12);
+          var wA = Math.min(netA, balance);
           balance -= wA;
           row.wd += wA;
         }
@@ -560,8 +607,9 @@
       ssAge: readNum('ssAge'),
       cola: readNum('cola')
     };
+    var drawPct = readNum('drawRate');
 
-    var rows = simulate(curAge, lifeExp, startBal, monthly0, ratePct, inflPct, compFreq, income);
+    var rows = simulate(curAge, lifeExp, startBal, monthly0, ratePct, inflPct, compFreq, income, method, drawPct);
     var years = Math.max(0, lifeExp - curAge);
     var last = rows.length ? rows[rows.length - 1] : null;
     var depleted = !!(last && last.end <= 0.005 && last.age < lifeExp) ||
@@ -594,6 +642,16 @@
     }
     $('kpiInterest').className = 'kpi';
     $('kpiWithdrawn').className = 'kpi';
+
+    var kpiDraw = $('kpiDraw');
+    if (method === 'pct') {
+      kpiDraw.querySelector('.k-value').textContent = drawPct.toFixed(1) + '%';
+      kpiDraw.querySelector('.k-sub').textContent = 'of current balance, withdrawn monthly';
+    } else {
+      var effRate = startBal > 0 ? monthly0 * 12 / startBal * 100 : 0;
+      kpiDraw.querySelector('.k-value').textContent = effRate.toFixed(1) + '%';
+      kpiDraw.querySelector('.k-sub').textContent = 'of starting balance per year';
+    }
 
     var note = $('note');
     if (curAge >= lifeExp) {
@@ -761,7 +819,7 @@
       var age = curAge + i;
       var pensBase = (age < income.reduce) ? income.p1 : income.p2;
       ages.push(age);
-      need.push(monthly0 * Math.pow(1 + inflPct / 100, i));                    // monthly spending need
+      need.push(i < rows.length ? rows[i].need / 12 : 0);                    // monthly spending need
       pens.push(pensBase * Math.pow(1 + income.cola / 100, i));                // monthly pension (COLA'd)
       ss.push((age >= income.ssAge) ? income.ss : 0);                          // monthly Social Security
       draw.push(i < rows.length ? rows[i].wd / 12 : 0);                        // monthly drawn from savings
