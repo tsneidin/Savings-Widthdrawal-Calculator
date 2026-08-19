@@ -479,6 +479,42 @@
   var methodSeg = $('methodSeg');
   var method = 'fixed';
 
+  var STORE_KEY = 'retirementCalcSettings';
+
+  function saveSettings() {
+    var data = { compFreq: compFreq, method: method, inputs: {} };
+    Object.keys(els).forEach(function (key) {
+      var v = parseFloat(els[key].num.value);
+      if (isFinite(v)) data.inputs[key] = v;
+    });
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch (e) { /* storage unavailable */ }
+  }
+
+  function loadSettings() {
+    var data = null;
+    try { data = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch (e) { return false; }
+    if (!data || !data.inputs) return false;
+    Object.keys(data.inputs).forEach(function (key) {
+      var pair = els[key];
+      if (!pair) return;
+      var v = data.inputs[key];
+      if (!isFinite(v)) return;
+      pair.num.value = v;
+      pair.slider.value = v;
+    });
+    if (data.compFreq === 'monthly' || data.compFreq === 'annual') {
+      compFreq = data.compFreq;
+      compSeg.querySelectorAll('button').forEach(function (b) { b.classList.toggle('active', b.dataset.freq === compFreq); });
+    }
+    if (data.method === 'fixed' || data.method === 'pct') {
+      method = data.method;
+      methodSeg.querySelectorAll('button').forEach(function (b) { b.classList.toggle('active', b.dataset.method === method); });
+      $('withdrawControl').classList.toggle('hidden', method === 'pct');
+      $('drawRateControl').classList.toggle('hidden', method === 'fixed');
+    }
+    return true;
+  }
+
   var fmtUSD = function (v) {
     if (!isFinite(v)) v = 0;
     return '$' + Math.round(v).toLocaleString('en-US');
@@ -490,10 +526,12 @@
     pair.slider.addEventListener('input', function () {
       pair.num.value = pair.slider.value;
       recalc();
+      saveSettings();
     });
     pair.num.addEventListener('input', function () {
       pair.slider.value = pair.num.value;
       recalc();
+      saveSettings();
     });
   });
 
@@ -504,6 +542,7 @@
     btn.classList.add('active');
     compFreq = btn.dataset.freq;
     recalc();
+    saveSettings();
   });
 
   methodSeg.addEventListener('click', function (e) {
@@ -515,6 +554,7 @@
     $('withdrawControl').classList.toggle('hidden', method === 'pct');
     $('drawRateControl').classList.toggle('hidden', method === 'fixed');
     recalc();
+    saveSettings();
   });
 
   /* ---------- reading + clamping inputs ---------- */
@@ -928,6 +968,7 @@
   }
 
   /* init */
+  loadSettings();
   recalc();
 })();
 </script>

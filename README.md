@@ -39,7 +39,8 @@ To remove: `docker rm -f savings-retirement-calculator && docker rmi savings-ret
 ## Features
 
 - **Slider ↔ number controls** – current age, life expectancy, starting balance, monthly portfolio withdrawal, monthly pension (pre-reduction and post-reduction amounts), the age the pension reduces, monthly Social Security and its start age, pension COLA, expected annual return, and inflation rate.
-- **Two withdrawal methods** – **Fixed $/month** (inflation-indexed dollar amount) or **% of Balance** (classic 4%-rule style: a selected annual percentage of the current portfolio, withdrawn monthly), switchable with a segmented control; the effective drawdown rate is shown on a KPI card.
+- **Two withdrawal methods** – **Fixed $/month** (inflation-indexed dollar amount) or **% of Balance** (classic 4%-rule style: a selected annual percentage of the current portfolio, withdrawn monthly), switchable with a segmented control; the effective drawdown rate is shown on a KPI card, and % mode shows the equivalent monthly dollar amount.
+- **Settings persistence** – all inputs, the compounding toggle, and the withdrawal method are saved to the browser's `localStorage` and restored on the next visit.
 - **Multi-source income model** – the monthly withdrawal is the amount taken **directly from the portfolio** (pension/SS never reduce it and never enter the portfolio); pension and Social Security are separate income paid on top, so total spending = withdrawal + pension + SS. The pension pays the pre-reduction amount until the chosen age, then the reduced amount, with the pension COLA compounding on both legs. Social Security is treated as flat (no COLA).
 - **Month-by-month simulation** – balances step monthly (or annually, via a toggle) and the run stops exactly at the month the portfolio is exhausted.
 - **KPI cards** – total interest earned, total funds withdrawn, the age your money runs out (or *Sustained*), and end-of-period balance.
