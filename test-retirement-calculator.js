@@ -8,9 +8,9 @@ const path = require('path');
 const FILE = path.join(__dirname, 'Retirement-Withdrawal-Calculator.html');
 const html = fs.readFileSync(FILE, 'utf8');
 
-function extractSimulate(src) {
-  const start = src.indexOf('function simulate');
-  if (start < 0) throw new Error('simulate not found in ' + FILE);
+function extractFn(src, name) {
+  const start = src.indexOf('function ' + name);
+  if (start < 0) throw new Error(name + ' not found in ' + FILE);
   const open = src.indexOf('{', start);
   let depth = 0;
   let j = open;
@@ -19,10 +19,15 @@ function extractSimulate(src) {
     if (c === '{') depth++;
     else if (c === '}') { depth--; if (depth === 0) break; }
   }
-  return (new Function(src.slice(start, j + 1) + '; return simulate;'))();
+  return src.slice(start, j + 1);
 }
 
-const simulate = extractSimulate(html);
+const { simulate, monteCarlo } = (new Function(
+  extractFn(html, 'simulate') + '\n' +
+  extractFn(html, 'gaussDraw') + '\n' +
+  extractFn(html, 'percentile') + '\n' +
+  extractFn(html, 'monteCarlo') +
+  '; return { simulate: simulate, monteCarlo: monteCarlo };'))();
 const sum = (rows, f) => rows.reduce((s, r) => s + f(r), 0);
 
 let pass = 0, fail = 0;
@@ -122,6 +127,36 @@ check('draw path matches the no-income run ($48k, $48k, $4k final)', r13.map(r =
 check('portfolio ends identical with income (separate) vs without', r13.every((r, i) => r.end === r13n[i].end), 'ends=' + r13.map(r => r.end).join(','));
 check('COLA inflates the pension leg of spending: y1 pension = 4080/mo',
   Math.abs(r13[1].need - (48000 + 4080 * 12)) < 0.01, r13[1].need);
+
+console.log('Test 12 - rateSeq drives per-year returns (Monte Carlo core):');
+const rs = simulate(60, 62, 1000000, 0, 6, 0, 'monthly', null, 'fixed', 4, [6, 6]);
+check('rateSeq of [6,6] == constant 6% run', rs.length === 2 &&
+  Math.abs(rs[rs.length - 1].end - simulate(60, 62, 1000000, 0, 6, 0, 'monthly')[1].end) < 0.01,
+  rs[rs.length - 1].end.toFixed(0));
+const rs0 = simulate(60, 62, 1000000, 0, 6, 0, 'monthly', null, 'fixed', 4, [0, 0]);
+check('rateSeq of zeros == 0% return (no growth)', Math.abs(rs0[rs.length - 1].end - 1000000) < 0.01,
+  rs0[rs.length - 1].end.toFixed(0));
+
+console.log('Test 13 - Monte Carlo sanity: vol=0 collapses to the deterministic run:');
+const mc0 = monteCarlo(50, 60, 90, 1000000, 4000, 6, 0, 2.5, 'monthly', null, 'fixed', 4);
+const det = simulate(60, 90, 1000000, 4000, 6, 2.5, 'monthly');
+check('vol=0: 100% success', mc0.successPct === 100, mc0.successPct);
+check('vol=0: median path matches deterministic projection', mc0.rows.length === det.length &&
+  Math.abs(mc0.rows[mc0.rows.length - 1].end - det[det.length - 1].end) < 0.01,
+  mc0.rows[mc0.rows.length - 1].end.toFixed(0) + ' vs ' + det[det.length - 1].end.toFixed(0));
+check('vol=0: band collapses onto the median', mc0.p10.every((v, i) => v === mc0.p90[i]), 'spread=' + (mc0.p90[29] - mc0.p10[29]).toFixed(0));
+
+console.log('Test 14 - Monte Carlo with volatility behaves sensibly:');
+const mc1 = monteCarlo(2000, 60, 90, 1000000, 4000, 6, 10, 2.5, 'monthly', null, 'fixed', 4);
+check('success rate is a sane probability', mc1.successPct > 0 && mc1.successPct <= 100, mc1.successPct.toFixed(1) + '%');
+check('band is ordered: p10 <= median <= p90 at every age',
+  mc1.p10.slice(0, mc1.rows.length).every((v, i) => v <= mc1.rows[i].end + 0.01) &&
+  mc1.rows.every((r, i) => r.end <= mc1.p90[i] + 0.01),
+  'p10@89=' + mc1.p10[29].toFixed(0) + ' med@89=' + mc1.rows[29].end.toFixed(0) + ' p90@89=' + mc1.p90[29].toFixed(0));
+check('volatility widens the band vs the vol=0 run', mc1.p90[29] - mc1.p10[29] > mc0.p90[29] - mc0.p10[29],
+  'spread=' + (mc1.p90[29] - mc1.p10[29]).toFixed(0));
+check('vol=0 run has strictly less risk than volatile run: higher success', mc0.successPct >= mc1.successPct,
+  mc0.successPct.toFixed(1) + '% vs ' + mc1.successPct.toFixed(1) + '%');
 
 console.log('');
 console.log(pass + ' passed, ' + fail + ' failed');

@@ -247,6 +247,32 @@
       </div>
     </div>
 
+    <div class="control">
+      <label style="margin-bottom:-2px">Simulation Method</label>
+      <div class="seg" id="simSeg">
+        <button type="button" data-sim="projection" class="active">Projection</button>
+        <button type="button" data-sim="mc">Monte Carlo</button>
+      </div>
+    </div>
+
+    <div class="control hidden" id="mcControl">
+      <div class="control-head">
+        <label for="volNum">Return Volatility (σ)</label>
+        <div class="input-wrap">
+          <input type="number" id="volNum" min="0" max="25" step="0.5" value="10">
+          <span class="unit">%</span>
+        </div>
+      </div>
+      <input type="range" id="volSlider" min="0" max="25" step="0.5" value="10">
+      <div class="control-head" style="margin-top:12px">
+        <label for="runsNum">Simulation Paths</label>
+        <div class="input-wrap">
+          <input type="number" id="runsNum" min="100" max="5000" step="100" value="1000">
+        </div>
+      </div>
+      <input type="range" id="runsSlider" min="100" max="5000" step="100" value="1000">
+    </div>
+
     <div class="control hidden" id="drawRateControl">
       <div class="control-head">
         <label for="drawRateNum">Annual Drawdown Rate</label>
@@ -359,7 +385,10 @@
       The monthly withdrawal is the amount taken from the portfolio each month (inflation-indexed in
       <b>Fixed $</b> mode; <b>% of Balance</b> draws a percentage of the current balance monthly). Pension and
       Social Security income is paid on top of the withdrawal and never enters the portfolio &mdash; total monthly
-      spending equals withdrawal + pension + SS. The simulation stops the moment savings run dry.
+      spending equals withdrawal + pension + SS. <b>Projection</b> mode uses one fixed return rate;
+      <b>Monte Carlo</b> mode draws a random annual return for each of 1,000+ paths (normal distribution around the
+      expected return, with your chosen volatility) and reports the success rate &mdash; the % of paths that never
+      run dry. The simulation stops the moment savings run dry.
     </p>
     <div class="note" id="note" role="status"></div>
   </section>
@@ -448,7 +477,10 @@
     reduced rate, both compounding by the pension COLA. Social Security starts at its start age and is treated as
     flat (no COLA). Pension and Social Security are separate income paid on top of the portfolio withdrawal
     &mdash; they are never added to the portfolio &mdash; so total spending equals withdrawal + pension + Social
-    Security. Interest compounds <code>monthly</code> or <code>annually</code> per your selection. Rates are
+    Security. In Projection mode a single fixed return is applied every year; Monte Carlo mode draws independent
+    annual returns from a normal distribution centered on the expected return with standard deviation equal to the
+    volatility input (clipped to &minus;60%/+90%), reruns the projection for every path, and shows the survival
+    rate plus 10th/50th/90th percentile balance bands. Interest compounds <code>monthly</code> or <code>annually</code> per your selection. Rates are
     nominal gross returns &mdash; subtract your effective tax drag to model after-tax performance. All values in USD.
   </p>
 </footer>
@@ -471,6 +503,8 @@
     ssAge:    { slider: $('ssAgeSlider'),   num: $('ssAgeNum') },
     cola:     { slider: $('colaSlider'),    num: $('colaNum') },
     drawRate: { slider: $('drawRateSlider'), num: $('drawRateNum') },
+    vol:      { slider: $('volSlider'),     num: $('volNum') },
+    runs:     { slider: $('runsSlider'),    num: $('runsNum') },
     rate:     { slider: $('rateSlider'),    num: $('rateNum') },
     infl:     { slider: $('inflSlider'),    num: $('inflNum') }
   };
@@ -478,11 +512,13 @@
   var compFreq = 'monthly';
   var methodSeg = $('methodSeg');
   var method = 'fixed';
+  var simSeg = $('simSeg');
+  var simMode = 'projection';
 
   var STORE_KEY = 'retirementCalcSettings';
 
   function saveSettings() {
-    var data = { compFreq: compFreq, method: method, inputs: {} };
+    var data = { compFreq: compFreq, method: method, simMode: simMode, inputs: {} };
     Object.keys(els).forEach(function (key) {
       var v = parseFloat(els[key].num.value);
       if (isFinite(v)) data.inputs[key] = v;
@@ -511,6 +547,11 @@
       methodSeg.querySelectorAll('button').forEach(function (b) { b.classList.toggle('active', b.dataset.method === method); });
       $('withdrawControl').classList.toggle('hidden', method === 'pct');
       $('drawRateControl').classList.toggle('hidden', method === 'fixed');
+    }
+    if (data.simMode === 'projection' || data.simMode === 'mc') {
+      simMode = data.simMode;
+      simSeg.querySelectorAll('button').forEach(function (b) { b.classList.toggle('active', b.dataset.sim === simMode); });
+      $('mcControl').classList.toggle('hidden', simMode !== 'mc');
     }
     return true;
   }
@@ -557,6 +598,17 @@
     saveSettings();
   });
 
+  simSeg.addEventListener('click', function (e) {
+    var btn = e.target.closest('button');
+    if (!btn) return;
+    simSeg.querySelectorAll('button').forEach(function (b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+    simMode = btn.dataset.sim;
+    $('mcControl').classList.toggle('hidden', simMode !== 'mc');
+    recalc();
+    saveSettings();
+  });
+
   /* ---------- reading + clamping inputs ---------- */
   function readNum(key) {
     var pair = els[key];
@@ -570,18 +622,19 @@
   }
 
   /* ---------- core simulation: month-by-month, inflation step-up ---------- */
-  function simulate(curAge, lifeExp, startBal, monthly0, ratePct, inflPct, freq, income, mode, drawPct) {
+  function simulate(curAge, lifeExp, startBal, monthly0, ratePct, inflPct, freq, income, mode, drawPct, rateSeq) {
     var rows = [];
     var balance = startBal;
     var years = Math.max(0, lifeExp - curAge);
-    var rMonthly = ratePct / 100 / 12;
-    var rAnnual = ratePct / 100;
     var infl = inflPct / 100;
     income = income || { p1: 0, reduce: 200, p2: 0, ss: 0, ssAge: 200, cola: 0 };
     mode = mode || 'fixed';
     drawPct = (drawPct === undefined || drawPct === null) ? 4 : drawPct;
 
     for (var y = 0; y < years; y++) {
+      var rY = rateSeq ? rateSeq[y] : ratePct;              // per-year annual return (%)
+      var rMonthly = rY / 100 / 12;
+      var rAnnual = rY / 100;
       var age = curAge + y;
       var wd0 = monthly0 * Math.pow(1 + infl, y);              // inflation-indexed portfolio withdrawal
       var pensBase = (age < income.reduce) ? income.p1 : income.p2;
@@ -621,6 +674,73 @@
     return rows;
   }
 
+  /* ---------- Monte Carlo: random return paths, percentile fan ---------- */
+  function gaussDraw(mean, sd) {
+    var u = 0, v = 0;
+    while (u === 0) u = Math.random();
+    while (v === 0) v = Math.random();
+    var z = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);   // Box-Muller
+    var r = mean + sd * z;
+    return Math.min(90, Math.max(-60, r));                             // clip to sane range
+  }
+
+  function percentile(sorted, p) {
+    if (!sorted.length) return 0;
+    var idx = Math.min(sorted.length - 1, Math.max(0, Math.floor(p * sorted.length)));
+    return sorted[idx];
+  }
+
+  function monteCarlo(paths, curAge, lifeExp, startBal, monthly0, ratePct, volPct, inflPct, freq, income, mode, drawPct) {
+    var years = Math.max(0, lifeExp - curAge);
+    var all = [], surv = 0, totalsI = [], totalsW = [];
+    for (var p = 0; p < paths; p++) {
+      var seq = [];
+      for (var y = 0; y < years; y++) seq.push(gaussDraw(ratePct, volPct));
+      var rows = simulate(curAge, lifeExp, startBal, monthly0, ratePct, inflPct, freq, income, mode, drawPct, seq);
+      all.push(rows);
+      if (rows.length && rows[rows.length - 1].end > 0.005) surv++;
+      totalsI.push(rows.reduce(function (s, r) { return s + r.interest; }, 0));
+      totalsW.push(rows.reduce(function (s, r) { return s + r.wd; }, 0));
+    }
+    var medRows = [], p10 = [], p90 = [];
+    for (var i = 0; i <= years; i++) {
+      var ends = [], starts = [], wds = [], ints = [], needs = [];
+      all.forEach(function (rows) {
+        var v = (i < rows.length) ? rows[i] : null;
+        var end = v ? v.end : 0;
+        ends.push(end);
+        starts.push(v ? v.start : 0);
+        wds.push(v ? v.wd : 0);
+        ints.push(v ? v.interest : 0);
+        needs.push(v ? v.need : 0);
+      });
+      var e = ends.slice().sort(function (a, b) { return a - b; });
+      var s = starts.slice().sort(function (a, b) { return a - b; });
+      var w = wds.slice().sort(function (a, b) { return a - b; });
+      var n = ints.slice().sort(function (a, b) { return a - b; });
+      var nd = needs.slice().sort(function (a, b) { return a - b; });
+      p10.push(percentile(e, 0.10));
+      p90.push(percentile(e, 0.90));
+      if (i < years) {
+        medRows.push({
+          age: curAge + i,
+          start: percentile(s, 0.50), wd: percentile(w, 0.50),
+          interest: percentile(n, 0.50), need: percentile(nd, 0.50), end: percentile(e, 0.50)
+        });
+      }
+    }
+    var ti = totalsI.slice().sort(function (a, b) { return a - b; });
+    var tw = totalsW.slice().sort(function (a, b) { return a - b; });
+    return {
+      successPct: 100 * surv / paths,
+      rows: medRows,
+      p10: p10,
+      p90: p90,
+      medTotalInterest: percentile(ti, 0.50),
+      medTotalWd: percentile(tw, 0.50)
+    };
+  }
+
   /* ---------- master recalculation ---------- */
   var chart = null;
   var sourceChart = null;
@@ -650,19 +770,44 @@
     };
     var drawPct = readNum('drawRate');
 
-    var rows = simulate(curAge, lifeExp, startBal, monthly0, ratePct, inflPct, compFreq, income, method, drawPct);
+    var mc = null;
+    var rows;
+    if (simMode === 'mc') {
+      var vol = readNum('vol');
+      var nPaths = Math.round(readNum('runs'));
+      mc = monteCarlo(nPaths, curAge, lifeExp, startBal, monthly0, ratePct, vol, inflPct, compFreq, income, method, drawPct);
+      rows = mc.rows;
+    } else {
+      rows = simulate(curAge, lifeExp, startBal, monthly0, ratePct, inflPct, compFreq, income, method, drawPct);
+    }
     var years = Math.max(0, lifeExp - curAge);
     var last = rows.length ? rows[rows.length - 1] : null;
-    var depleted = !!(last && last.end <= 0.005 && last.age < lifeExp) ||
-                   (!!(last && last.end <= 0.005) && rows.length === years && years > 0);
-    var sustained = !depleted && years > 0;
+    var depleted, sustained;
+    if (mc) {
+      depleted = mc.successPct < 99.5;
+      sustained = mc.successPct >= 99.5 && years > 0;
+    } else {
+      depleted = !!(last && last.end <= 0.005 && last.age < lifeExp) ||
+                 (!!(last && last.end <= 0.005) && rows.length === years && years > 0);
+      sustained = !depleted && years > 0;
+    }
 
     var totalInterest = rows.reduce(function (s, r) { return s + r.interest; }, 0);
     var totalWd = rows.reduce(function (s, r) { return s + r.wd; }, 0);
 
     /* KPI cards */
     var kpiRunout = $('kpiRunout'), kpiFinal = $('kpiFinal');
-    if (depleted) {
+    if (mc) {
+      $('kpiInterest').querySelector('.k-value').textContent = fmtUSD(mc.medTotalInterest);
+      $('kpiWithdrawn').querySelector('.k-value').textContent = fmtUSD(mc.medTotalWd);
+      kpiRunout.querySelector('.k-label').textContent = 'Success Rate';
+      kpiRunout.querySelector('.k-value').textContent = mc.successPct.toFixed(0) + '%';
+      kpiRunout.querySelector('.k-sub').textContent = 'of ' + nPaths + ' random return paths survive to age ' + lifeExp;
+      kpiRunout.className = 'kpi ' + (mc.successPct >= 90 ? 'good' : mc.successPct < 70 ? 'bad' : '');
+      $('kpiFinal').querySelector('.k-value').textContent = fmtUSD(mc.rows.length ? mc.rows[mc.rows.length - 1].end : 0);
+      $('kpiFinal').querySelector('.k-sub').textContent = 'median ending balance across ' + nPaths + ' paths';
+      kpiFinal.className = 'kpi ' + (mc.successPct >= 90 ? 'good' : mc.successPct < 70 ? 'bad' : '');
+    } else if (depleted) {
       $('kpiInterest').querySelector('.k-value').textContent = fmtUSD(totalInterest);
       $('kpiWithdrawn').querySelector('.k-value').textContent = fmtUSD(totalWd);
       kpiRunout.querySelector('.k-value').textContent = 'Age ' + last.age;
@@ -674,6 +819,7 @@
     } else {
       $('kpiInterest').querySelector('.k-value').textContent = fmtUSD(totalInterest);
       $('kpiWithdrawn').querySelector('.k-value').textContent = fmtUSD(totalWd);
+      kpiRunout.querySelector('.k-label').textContent = 'Money Runs Out At';
       kpiRunout.querySelector('.k-value').textContent = 'Sustained';
       kpiRunout.querySelector('.k-sub').textContent = 'portfolio survives through age ' + lifeExp;
       kpiRunout.className = 'kpi good';
@@ -704,7 +850,11 @@
       note.classList.remove('show');
     }
 
-    renderChart(curAge, lifeExp, rows, years, depleted);
+    if (mc) {
+      renderMcChart(curAge, years, mc.p10, rows, mc.p90);
+    } else {
+      renderChart(curAge, lifeExp, rows, years, depleted);
+    }
     renderSourceChart(curAge, years, rows, monthly0, inflPct, income);
     renderCumSpendingChart(curAge, years, rows, monthly0, inflPct, income);
     renderTable(rows, curAge, lifeExp, depleted);
@@ -783,6 +933,70 @@
             }
           },
           depletionMarker: { age: depIdx !== null ? ages[depIdx] : null }
+        },
+        scales: {
+          x: {
+            title: { display: true, text: 'Age', color: '#8ea0bc' },
+            grid: { color: 'rgba(37,51,86,.4)' },
+            ticks: { color: '#8ea0bc' }
+          },
+          y: {
+            title: { display: true, text: 'Portfolio Balance ($)', color: '#8ea0bc' },
+            grid: { color: 'rgba(37,51,86,.4)' },
+            ticks: {
+              color: '#8ea0bc',
+              callback: function (v) {
+                if (v >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
+                if (v >= 1e3) return '$' + (v / 1e3).toFixed(0) + 'k';
+                return '$' + v;
+              }
+            }
+          }
+        }
+      },
+      plugins: [depletionLinePlugin]
+    });
+  }
+
+  /* ---------- Monte Carlo balance fan chart (p10 band, median line) ---------- */
+  function renderMcChart(curAge, years, p10, medRows, p90) {
+    var ages = [], med = [];
+    for (var i = 0; i <= years; i++) {
+      ages.push(curAge + i);
+      med.push(i < medRows.length ? medRows[i].end : 0);
+    }
+
+    if (chart) { chart.destroy(); chart = null; }
+
+    var ctx = $('chart').getContext('2d');
+    chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: ages,
+        datasets: [
+          { label: '10th percentile', data: p10, borderColor: 'rgba(34,211,238,.35)', borderWidth: 1, fill: false, tension: 0.3, pointRadius: 0, pointHitRadius: 8 },
+          { label: '90th percentile', data: p90, borderColor: 'rgba(34,211,238,.35)', borderWidth: 1, fill: '-1', backgroundColor: 'rgba(34,211,238,.13)', tension: 0.3, pointRadius: 0, pointHitRadius: 8 },
+          { label: 'Median balance', data: med, borderColor: '#22d3ee', borderWidth: 2.5, fill: false, tension: 0.3, pointRadius: 0, pointHitRadius: 8 }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: 'rgba(11,18,32,.92)',
+            titleColor: '#e6edf7',
+            bodyColor: '#8ea0bc',
+            borderColor: '#253356',
+            borderWidth: 1,
+            padding: 10,
+            callbacks: {
+              label: function (c) { return c.dataset.label + ': ' + fmtUSD(c.parsed.y); }
+            }
+          },
+          depletionMarker: { age: null }
         },
         scales: {
           x: {

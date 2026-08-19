@@ -40,7 +40,8 @@ To remove: `docker rm -f savings-retirement-calculator && docker rmi savings-ret
 
 - **Slider ↔ number controls** – current age, life expectancy, starting balance, monthly portfolio withdrawal, monthly pension (pre-reduction and post-reduction amounts), the age the pension reduces, monthly Social Security and its start age, pension COLA, expected annual return, and inflation rate.
 - **Two withdrawal methods** – **Fixed $/month** (inflation-indexed dollar amount) or **% of Balance** (classic 4%-rule style: a selected annual percentage of the current portfolio, withdrawn monthly), switchable with a segmented control; the effective drawdown rate is shown on a KPI card, and % mode shows the equivalent monthly dollar amount.
-- **Settings persistence** – all inputs, the compounding toggle, and the withdrawal method are saved to the browser's `localStorage` and restored on the next visit.
+- **Settings persistence** – all inputs, the compounding toggle, the withdrawal method, and the simulation method are saved to the browser's `localStorage` and restored on the next visit.
+- **Two simulation modes** – **Projection** applies one fixed return every year; **Monte Carlo** draws independent annual returns from a normal distribution (expected return ± chosen volatility, 100–5,000 paths), reports the **success rate** (% of paths that never run dry), and plots a 10th/50th/90th percentile balance fan along with median funding and spending charts.
 - **Multi-source income model** – the monthly withdrawal is the amount taken **directly from the portfolio** (pension/SS never reduce it and never enter the portfolio); pension and Social Security are separate income paid on top, so total spending = withdrawal + pension + SS. The pension pays the pre-reduction amount until the chosen age, then the reduced amount, with the pension COLA compounding on both legs. Social Security is treated as flat (no COLA).
 - **Month-by-month simulation** – balances step monthly (or annually, via a toggle) and the run stops exactly at the month the portfolio is exhausted.
 - **KPI cards** – total interest earned, total funds withdrawn, the age your money runs out (or *Sustained*), and end-of-period balance.
@@ -59,6 +60,7 @@ For each year `y` after retirement (`curAge` to `lifeExpectancy`):
 - income (pension + SS) is separate income paid on top of the withdrawal; it is never deposited into the portfolio; total spending = `withdrawal + pension + SS`
 - **Monthly compounding**: each month `balance = balance × (1 + return/12) − withdrawal`.
 - **Annual compounding**: each year `balance = balance × (1 + return) − 12 × withdrawal`.
+- In **Monte Carlo** mode each year's return is a random draw `N(return, volatility)` (clipped to −60%/+90%), and the balance path is simulated per path; success = path ending above $0 at life expectancy.
 - The portfolio is treated as exhausted the month balance reaches zero.
 - Rates are nominal gross returns — subtract your effective tax drag from the return input to model after-tax performance.
 
