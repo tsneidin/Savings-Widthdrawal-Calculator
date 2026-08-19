@@ -256,6 +256,7 @@
         </div>
       </div>
       <input type="range" id="drawRateSlider" min="0" max="20" step="0.1" value="4">
+      <p class="hint small" id="pctReadout">&nbsp;</p>
     </div>
 
     <div class="control">
@@ -647,10 +648,12 @@
     if (method === 'pct') {
       kpiDraw.querySelector('.k-value').textContent = drawPct.toFixed(1) + '%';
       kpiDraw.querySelector('.k-sub').textContent = 'of current balance, withdrawn monthly';
+      $('pctReadout').textContent = '\u2248 ' + fmtUSD(rows.length ? rows[0].wd / 12 : 0) + '/mo drawn in the first year';
     } else {
       var effRate = startBal > 0 ? monthly0 * 12 / startBal * 100 : 0;
       kpiDraw.querySelector('.k-value').textContent = effRate.toFixed(1) + '%';
       kpiDraw.querySelector('.k-sub').textContent = 'of portfolio balance at age ' + curAge + ' \u2014 varies as balance changes';
+      $('pctReadout').textContent = '\u00a0';
     }
 
     var note = $('note');
