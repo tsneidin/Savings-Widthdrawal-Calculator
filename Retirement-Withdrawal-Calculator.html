@@ -357,8 +357,8 @@
     <p class="hint">
       The monthly withdrawal is the amount taken from the portfolio each month (inflation-indexed in
       <b>Fixed $</b> mode; <b>% of Balance</b> draws a percentage of the current balance monthly). Pension and
-      Social Security income flows into the portfolio, so total monthly spending equals withdrawal + pension + SS.
-      The simulation stops the moment savings run dry.
+      Social Security income is paid on top of the withdrawal and never enters the portfolio &mdash; total monthly
+      spending equals withdrawal + pension + SS. The simulation stops the moment savings run dry.
     </p>
     <div class="note" id="note" role="status"></div>
   </section>
@@ -445,10 +445,10 @@
     Simulation notes: the monthly withdrawal is taken directly from the portfolio (inflation-indexed in
     fixed-$ mode). Pension income pays at the pre-reduction rate until the "Pension Reduces At" age, then the
     reduced rate, both compounding by the pension COLA. Social Security starts at its start age and is treated as
-    flat (no COLA). Pension and Social Security payments flow into the portfolio each month, so total spending
-    equals withdrawal + pension + Social Security. Interest compounds <code>monthly</code> or <code>annually</code>
-    per your selection. Rates are nominal gross returns &mdash; subtract your effective tax drag to model
-    after-tax performance. All values in USD.
+    flat (no COLA). Pension and Social Security are separate income paid on top of the portfolio withdrawal
+    &mdash; they are never added to the portfolio &mdash; so total spending equals withdrawal + pension + Social
+    Security. Interest compounds <code>monthly</code> or <code>annually</code> per your selection. Rates are
+    nominal gross returns &mdash; subtract your effective tax drag to model after-tax performance. All values in USD.
   </p>
 </footer>
 
@@ -555,9 +555,8 @@
             var interest = balance * rMonthly;
             balance += interest;
             row.interest += interest;
-            balance += pens + ssInc;                           // pension + SS income flows into portfolio
             var wdM = (mode === 'pct') ? balance * drawPct / 100 / 12 : wd0;
-            row.need += wdM + pens + ssInc;                    // total spending this month
+            row.need += wdM + pens + ssInc;                    // total spending this month (income is separate, spent on top)
             var w = Math.min(wdM, balance);                    // never lets balance go negative
             balance -= w;
             row.wd += w;
@@ -566,7 +565,6 @@
           var interestA = balance * rAnnual;
           balance += interestA;
           row.interest += interestA;
-          balance += (pens + ssInc) * 12;                      // income flows into portfolio
           var wdY = (mode === 'pct') ? balance * drawPct / 100 : wd0 * 12;
           row.need += wdY + (pens + ssInc) * 12;
           var wA = Math.min(wdY, balance);
